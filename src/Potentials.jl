@@ -101,12 +101,9 @@ end
 
 @pot ZeroSitePotential
 
-# evaluate(p::ZeroSitePotential, R::AbstractVector{JVec{T}}
-#       ) where {T} = zero(T)
-# evaluate_d(p::ZeroSitePotential, R::AbstractVector{JVec{T}}
-#       ) where {T} = zeros(T, length(R))
 cutoff(::ZeroSitePotential) = Bool(0)
-
+energy(V::ZeroSitePotential, at::AbstractAtoms{T}; kwargs...) where T = zero(T)
+forces(V::ZeroSitePotential, at::AbstractAtoms{T}; kwargs...) where T = zeros(JVec{T}, length(at))
 evaluate!(tmp, p::ZeroSitePotential, args...) = Bool(0)
 evaluate_d!(dEs, tmp, V::ZeroSitePotential, args...) = fill!(dEs, zero(eltype(dEs)))
 evaluate_dd!(hEs, tmp, V::ZeroSitePotential, args...) = fill!(hEs, zero(eltype(hEs)))
@@ -193,10 +190,10 @@ function site_energies!(Es, tmp, V::SitePotential, at::AbstractAtoms{T};
    return Es
 end
 
-site_energy(V::Union{SitePotential, PairPotential}, at::AbstractAtoms, i0::Int) =
+site_energy(V::SitePotential, at::AbstractAtoms, i0::Integer) =
       energy(V, at; domain = (i0,))
 
-site_energy_d(V::Union{SitePotential, PairPotential}, at::AbstractAtoms, i0::Int) =
+site_energy_d(V::SitePotential, at::AbstractAtoms, i0::Integer) =
       rmul!(forces(V, at; domain = (i0,)), -one(eltype(at)))
 
 
