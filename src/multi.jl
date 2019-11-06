@@ -128,7 +128,7 @@ forces(V::MSitePotential, at::AbstractAtoms{T}; kwargs...) where {T} =
 
 function energy!(tmp, calc::MSitePotential, at::Atoms{T};
                  domain=1:length(at)) where {T}
-   E = 0.0
+   E = zero(T)
    nlist = neighbourlist(at, cutoff(calc))
    for i in domain
       j, R, Z = neigsz!(tmp, nlist, at, i)
@@ -143,10 +143,12 @@ function forces!(frc, tmp, calc::MSitePotential, at::Atoms{T};
    nlist = neighbourlist(at, cutoff(calc))
    for i in domain
       j, R, Z = neigsz!(tmp, nlist, at, i)
-      evaluate_d!(tmp.dV, tmp, calc, R, Z, Int16(at.Z[i]))
-      for a = 1:length(j)
-         frc[j[a]] -= tmp.dV[a]
-         frc[i]    += tmp.dV[a]
+      if length(j) > 0
+         evaluate_d!(tmp.dV, tmp, calc, R, Z, Int16(at.Z[i]))
+         for a = 1:length(j)
+            frc[j[a]] -= tmp.dV[a]
+            frc[i]    += tmp.dV[a]
+         end
       end
    end
    return frc
@@ -158,8 +160,10 @@ function virial!(tmp, calc::MSitePotential, at::Atoms{T};
    vir = zero(JMat{T})
    for i in domain
       j, R, Z = neigsz!(tmp, nlist, at, i)
-      evaluate_d!(tmp.dV, tmp, calc, R, Z, Int16(at.Z[i]))
-      vir += site_virial(tmp.dV, R)
+      if length(j) > 0
+         evaluate_d!(tmp.dV, tmp, calc, R, Z, Int16(at.Z[i]))
+         vir += site_virial(tmp.dV, R)
+      end
    end
    return vir
 end
@@ -182,9 +186,10 @@ site_energy_d(V::MSitePotential, at::AbstractAtoms, i0::Integer) =
 
 # -------- Dispatch for MPairPotentials ------------------------------------
 
-evaluate!(tmp, V::MPairPotential, R::AbstractVector, Z::AbstractVector, z0) =
-   sum( evaluate!(tmp, V, norm(R[i]), Z[i], z0)
-        for i = 1:length(R) )
+evaluate!(tmp, V::MPairPotential,
+          R::AbstractVector{<: JVec{T}}, Z::AbstractVector, z0) where {T} =
+   length(R) == 0 ? zero(T) : sum( evaluate!(tmp, V, norm(R[i]), Z[i], z0)
+                                   for i = 1:length(R) )
 
 function evaluate_d!(dV, tmp, V::MPairPotential, R, Z, z0)
    dV = tmp.dV
@@ -195,10 +200,35 @@ function evaluate_d!(dV, tmp, V::MPairPotential, R, Z, z0)
    return dV
 end
 
+evaluate(V::MPairPotential, r, z1, z0) =
+      evaluate!(alloc_temp(V, 1), V, r, z1, z0)
+
+evaluate_d(V::MPairPotential, r, z1, z0) =
+      evaluate_d!(alloc_temp_d(V, 1), V, r, z1, z0)
 
 
-# -----------------------------------------------------------------------------
+# ------------------ Preconditioners for MPairPotentials ----------------------
 
+
+function precon!(hEs, tmp, V::MPairPotential, R::AbstractVector{<: JVec},
+                 Z::AbstractVector, z0, innerstab=T(0.0))
+   n = length(R)
+   for i = 1:n
+      hEs[i,i] = precon!(tmp, V, norm(R[i]), R[i], Z[i], z0, innerstab)
+   end
+   return hEs
+end
+
+# # an FF preconditioner for pair potentials
+# function precon!(tmp, V::PairPotential, r::T, R::JVec{T}, innerstab=T(0.1)
+#                  ) where {T <: Number}
+#    r = norm(R)
+#    dV = evaluate_d!(tmp, V, r)
+#    ddV = evaluate_dd!(tmp, V, r)
+#    R̂ = R/r
+#    return (1-innerstab) * (abs(ddV) * R̂ * R̂' + abs(dV / r) * (I - R̂ * R̂')) +
+#              innerstab  * (abs(ddV) + abs(dV / r)) * I
+# end
 
 
 
